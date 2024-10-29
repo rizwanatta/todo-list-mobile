@@ -1,13 +1,15 @@
 import {MeterProvider} from '@opentelemetry/sdk-metrics';
 import {PrometheusExporter} from '@opentelemetry/exporter-prometheus';
 import {WebTracerProvider} from '@opentelemetry/sdk-trace-web';
+import {OTLPTraceExporter} from '@opentelemetry/exporter-trace-otlp-http';
+import {SimpleSpanProcessor} from '@opentelemetry/sdk-trace-base';
 import {logToLoki} from './graphana';
 
-// Initialize Prometheus Exporter
+// Initialize Prometheus Exporter for metrics
 const prometheusExporter = new PrometheusExporter(
-  {port: 9009, host: 'http://192.168.1.26'}, // Make sure this port matches the one in your Prometheus config
+  {port: 9009, host: 'http://172.20.10.2'}, // Match this with your Prometheus setup
   () =>
-    console.log('Prometheus scrape endpoint: http://192.168.1.26:9009/metrics'),
+    console.log('Prometheus scrape endpoint: http://172.20.10.2:9009/metrics'),
 );
 
 // Initialize Meter Provider
@@ -19,8 +21,15 @@ const meterProvider = new MeterProvider({
 // Expose a Meter instance for recording metrics in the app
 const meter = meterProvider.getMeter('react-native-app');
 
-// Initialize Web Tracer Provider for tracing functionality
+// Initialize OTLP Trace Exporter for Tempo
+const otlpExporter = new OTLPTraceExporter({
+  url: 'http://172.20.10.2:3200/api/traces', // Adjust this URL to match your Tempo instance's endpoint
+  headers: {}, // Add any necessary headers here
+});
+
+// Initialize Web Tracer Provider with OTLP Exporter for Tempo
 const tracerProvider = new WebTracerProvider();
+tracerProvider.addSpanProcessor(new SimpleSpanProcessor(otlpExporter));
 tracerProvider.register();
 
 // Create reusable metric instruments (e.g., counters and histograms)
@@ -35,8 +44,6 @@ export const screenLoadDuration = meter.createHistogram(
   },
 );
 
-export {meter};
-
 /**
  * Utility function to record a screen load duration
  * @param {string} screenName - Name of the screen
@@ -47,8 +54,23 @@ export const trackScreenLoad = (screenName, duration) => {
   logToLoki('Screen load duration recorded');
 };
 
+// Function to start a span for tracking an operation (useful for Tempo traces)
+export const startTrace = name => {
+  const tracer = tracerProvider.getTracer('react-native-app');
+  const span = tracer.startSpan(name);
+  return span;
+};
+
+// Function to end a span
+export const endTrace = span => {
+  span.end();
+  logToLoki(`Trace ended: ${span.name}`);
+};
+
 // Export the providers and metrics for use in the app
 export const telemetry = {
   meterProvider,
   tracerProvider,
 };
+
+export {meter, tracerProvider};

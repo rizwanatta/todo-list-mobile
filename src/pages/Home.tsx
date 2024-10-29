@@ -1,4 +1,4 @@
-import React, {useState} from 'react';
+import React, {useEffect, useState} from 'react';
 import {Alert, StyleSheet, View} from 'react-native';
 
 import {Header} from '../components/Header';
@@ -7,6 +7,8 @@ import {TodoInput} from '../components/TodoInput';
 import {logToLoki} from '../utils';
 import {
   apiRequestCounter,
+  startTrace,
+  endTrace,
   trackScreenLoad,
 } from '../utils/otm/TelemetryProvider';
 
@@ -14,6 +16,22 @@ export function Home() {
   const [tasks, setTasks] = useState<Task[]>([]);
 
   trackScreenLoad('Home', 2000);
+
+  useEffect(() => {
+    // Start a new trace for loading the Home screen
+    const span = startTrace('Home Screen Load');
+
+    // Simulate async loading
+    setTimeout(() => {
+      endTrace(span); // End the trace once loading is complete
+    }, 3000);
+
+    return () => {
+      if (!span.isRecording()) {
+        endTrace(span); // Ensure span is ended if component unmounts
+      }
+    };
+  }, []);
 
   function handleAddTask(newTaskTitle: string) {
     const hasTaskWithThisName =
